@@ -392,6 +392,45 @@ query($slug: String!, $orgCursor: String) {
 
 ---
 
+## 11. npm Dependency: undici CVE Override
+
+**Date:** 2026-04-06  
+**Author:** Whistler  
+**Status:** Applied
+
+### Context
+
+`npm audit` reported 3 vulnerabilities (2 moderate, 1 high) all rooted in `undici <=6.23.0`:
+- Affected: `undici@5.29.0` (transitively via `@actions/github` and `@actions/http-client`)
+
+### Decision
+
+Use **npm `overrides`** in `package.json` to pin `undici` to `6.24.1`.
+
+```json
+"overrides": {
+  "undici": "6.24.1"
+}
+```
+
+### Rationale
+
+- Latest `@actions/github@9.0.0` still specifies `undici: "^6.23.0"` — would still resolve to vulnerable version without override
+- Upgrading to major versions risks breaking TypeScript API compatibility
+- Override is minimal, surgical fix with zero behavioral change
+- `6.24.1` is first safe version in the 6.x branch, compatible with semver ranges requested by `@actions/*` packages
+- Using 7.x/8.x would be larger jump with potential compatibility issues
+
+### Risk Assessment
+
+Low. `undici` is pure HTTP client — override bumps within same major version (6.x). Test suite unaffected. 11 labels tests pass; 2 pre-existing TypeScript type errors remain unrelated.
+
+### Future
+
+Once `@actions/github` and `@actions/http-client` release versions depending on `undici >=6.24.0`, override can be removed.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus
