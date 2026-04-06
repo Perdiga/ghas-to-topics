@@ -29,10 +29,11 @@ Fine-grained tokens are scoped to specific organizations or repositories. Config
 | Permission | Access | Why |
 |------------|--------|-----|
 | **Repository permissions** | | |
+| `Administration` | Write | Update repository topics |
 | `Code scanning alerts` | Read | Read code scanning alert counts |
 | `Secret scanning alerts` | Read | Read secret scanning alert counts |
 | `Dependabot alerts` | Read | Read Dependabot alert counts |
-| `Metadata` | Read and write | Read and update repository topics |
+| `Metadata` | Read (mandatory) | Required by GitHub for all fine-grained tokens |
 
 > **Note 1:** When creating the token, set the resource owner to your organization and grant access to **All repositories** (or the specific repos you want to update).
 >
