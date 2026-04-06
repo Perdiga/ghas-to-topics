@@ -3,9 +3,6 @@ export interface ActionInputs {
     organization?: string;
     enterprise?: string;
     dryRun: boolean;
-    labelColorSecurity: string;
-    labelColorCode: string;
-    labelColorDependabot: string;
 }
 export interface Repository {
     owner: string;
@@ -20,8 +17,7 @@ export interface AlertCounts {
     codeScanning: number;
     dependabot: number;
 }
-export interface LabelConfig {
+export interface TopicConfig {
     prefix: string;
-    color: string;
     description: string;
 }

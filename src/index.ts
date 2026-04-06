@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
-import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
-import { ActionInputs, LabelConfig, Repository } from './types';
+import { ActionInputs, Repository } from './types';
 import {
   getOrgRepos,
   getEnterpriseRepos,
@@ -9,18 +8,13 @@ import {
   getCodeScanningAlertCount,
   getDependabotAlertCount
 } from './github';
-import { processRepoLabels } from './labels';
+import { processRepoTopics } from './topics';
 
 async function parseInputs(): Promise<ActionInputs> {
   const token = core.getInput('token', { required: true });
   const organization = core.getInput('organization');
   const enterprise = core.getInput('enterprise');
-  const dryRunInput = core.getInput('dry-run');
-  const dryRun = dryRunInput === 'true';
-
-  const labelColorSecurity = core.getInput('label-color-security') || 'd73a4a';
-  const labelColorCode = core.getInput('label-color-code') || 'e4e669';
-  const labelColorDependabot = core.getInput('label-color-dependabot') || '0075ca';
+  const dryRun = core.getInput('dry-run') === 'true';
 
   if (!organization && !enterprise) {
     throw new Error('Must provide either organization or enterprise input');
@@ -34,17 +28,13 @@ async function parseInputs(): Promise<ActionInputs> {
     token,
     organization: organization || undefined,
     enterprise: enterprise || undefined,
-    dryRun,
-    labelColorSecurity,
-    labelColorCode,
-    labelColorDependabot
+    dryRun
   };
 }
 
 async function processRepository(
   octokit: Octokit,
   repo: Repository,
-  labelConfigs: LabelConfig[],
   dryRun: boolean
 ): Promise<number> {
   core.info(`Processing ${repo.full_name}...`);
@@ -57,26 +47,20 @@ async function processRepository(
 
   core.info(`  Secret scanning: ${security}, Code scanning: ${codeScanning}, Dependabot: ${dependabot}`);
 
-  const labelsApplied = await processRepoLabels(
+  return processRepoTopics(
     octokit,
     repo,
     { security, codeScanning, dependabot },
-    labelConfigs,
     dryRun
   );
-
-  return labelsApplied;
 }
 
 async function run(): Promise<void> {
   try {
     const inputs = await parseInputs();
 
-    const octokit = new Octokit({
-      auth: inputs.token
-    });
+    const octokit = new Octokit({ auth: inputs.token });
 
-    // Get repositories
     let repos: Repository[];
     if (inputs.organization) {
       repos = await getOrgRepos(octokit, inputs.organization);
@@ -86,44 +70,23 @@ async function run(): Promise<void> {
       throw new Error('No organization or enterprise specified');
     }
 
-    // Filter out archived repos
     const activeRepos = repos.filter(repo => !repo.archived);
     core.info(`Processing ${activeRepos.length} active repositories (${repos.length - activeRepos.length} archived repos skipped)`);
 
-    // Configure labels
-    const labelConfigs: LabelConfig[] = [
-      {
-        prefix: 'S',
-        color: inputs.labelColorSecurity,
-        description: 'Secret scanning alert count'
-      },
-      {
-        prefix: 'C',
-        color: inputs.labelColorCode,
-        description: 'Code scanning alert count'
-      },
-      {
-        prefix: 'D',
-        color: inputs.labelColorDependabot,
-        description: 'Dependabot alert count'
-      }
-    ];
-
-    // Process repos with concurrency limit
     const concurrencyLimit = 10;
-    let totalLabelsApplied = 0;
+    let totalTopicsApplied = 0;
     let processedCount = 0;
 
     for (let i = 0; i < activeRepos.length; i += concurrencyLimit) {
       const batch = activeRepos.slice(i, i + concurrencyLimit);
-      
+
       const results = await Promise.allSettled(
-        batch.map(repo => processRepository(octokit, repo, labelConfigs, inputs.dryRun))
+        batch.map(repo => processRepository(octokit, repo, inputs.dryRun))
       );
 
       for (const result of results) {
         if (result.status === 'fulfilled') {
-          totalLabelsApplied += result.value;
+          totalTopicsApplied += result.value;
           processedCount++;
         } else {
           core.error(`Failed to process repository: ${result.reason}`);
@@ -131,16 +94,14 @@ async function run(): Promise<void> {
       }
     }
 
-    // Set outputs
     core.setOutput('repositories-processed', processedCount.toString());
-    core.setOutput('labels-applied', totalLabelsApplied.toString());
+    core.setOutput('topics-applied', totalTopicsApplied.toString());
 
-    // Summary
     core.info('');
     core.info('='.repeat(50));
-    core.info(`Summary:`);
+    core.info('Summary:');
     core.info(`  Repositories processed: ${processedCount}`);
-    core.info(`  Labels applied/updated: ${totalLabelsApplied}`);
+    core.info(`  Repositories with topic updates: ${totalTopicsApplied}`);
     if (inputs.dryRun) {
       core.info('  (DRY RUN - no changes were made)');
     }

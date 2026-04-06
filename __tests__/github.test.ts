@@ -4,15 +4,17 @@ import {
   getSecurityAlertCount, 
   getCodeScanningAlertCount,
   getDependabotAlertCount,
-  upsertLabel,
-  getExistingLabels 
+  getRepoTopics,
+  replaceRepoTopics
 } from '../src/github'
 
 const createMockOctokit = () => ({
   rest: {
     repos: { 
       listForOrg: jest.fn(), 
-      listForUser: jest.fn() 
+      listForUser: jest.fn(),
+      getAllTopics: jest.fn(),
+      replaceAllTopics: jest.fn()
     },
     secretScanning: { 
       listAlertsForRepo: jest.fn() 
@@ -22,12 +24,6 @@ const createMockOctokit = () => ({
     },
     dependabot: { 
       listRepoAlerts: jest.fn() 
-    },
-    issues: { 
-      getLabel: jest.fn(), 
-      createLabel: jest.fn(), 
-      updateLabel: jest.fn(), 
-      listLabelsForRepo: jest.fn() 
     },
   },
   paginate: {
@@ -350,94 +346,39 @@ describe('getDependabotAlertCount', () => {
   })
 })
 
-describe('upsertLabel', () => {
-  it('creates label when it does not exist', async () => {
+describe('getRepoTopics', () => {
+  it('returns topics for a repo', async () => {
     const mockOctokit = createMockOctokit()
-    mockOctokit.rest.issues.getLabel.mockRejectedValue({ status: 404 })
-    mockOctokit.rest.issues.createLabel.mockResolvedValue({ data: { name: 'S-5' } })
-
-    await upsertLabel(mockOctokit as any, 'owner', 'repo', 'S-5', 'ff0000', 'Security alerts')
-
-    expect(mockOctokit.rest.issues.getLabel).toHaveBeenCalledWith({
-      owner: 'owner',
-      repo: 'repo',
-      name: 'S-5'
-    })
-    expect(mockOctokit.rest.issues.createLabel).toHaveBeenCalledWith({
-      owner: 'owner',
-      repo: 'repo',
-      name: 'S-5',
-      color: 'ff0000',
-      description: 'Security alerts'
-    })
-  })
-
-  it('updates label when it already exists', async () => {
-    const mockOctokit = createMockOctokit()
-    mockOctokit.rest.issues.getLabel.mockResolvedValue({
-      data: { name: 'S-5' }
-    })
-    mockOctokit.rest.issues.updateLabel.mockResolvedValue({
-      data: { name: 'S-5' }
+    ;(mockOctokit.rest.repos.getAllTopics as any).mockResolvedValue({
+      data: { names: ['javascript', 'ghas-secret-5', 'ghas-code-3'] }
     })
 
-    await upsertLabel(mockOctokit as any, 'owner', 'repo', 'S-5', 'ff0000', 'Security alerts')
+    const result = await getRepoTopics(mockOctokit as any, 'owner', 'repo')
 
-    expect(mockOctokit.rest.issues.updateLabel).toHaveBeenCalledWith({
-      owner: 'owner',
-      repo: 'repo',
-      name: 'S-5',
-      color: 'ff0000',
-      description: 'Security alerts'
-    })
-  })
-
-  it('handles unexpected errors', async () => {
-    const mockOctokit = createMockOctokit()
-    const error = new Error('Internal Server Error')
-    ;(error as any).status = 500
-    mockOctokit.rest.issues.getLabel.mockRejectedValue(error)
-
-    await expect(
-      upsertLabel(mockOctokit as any, 'owner', 'repo', 'S-5', 'ff0000', 'Security alerts')
-    ).rejects.toThrow('Internal Server Error')
-  })
-})
-
-describe('getExistingLabels', () => {
-  it('returns all labels for a repo', async () => {
-    const mockOctokit = createMockOctokit()
-    const labels = [
-      { name: 'bug' },
-      { name: 'S-5' },
-      { name: 'enhancement' }
-    ]
-    
-    const mockIterator = {
-      async *[Symbol.asyncIterator]() {
-        yield { data: labels }
-      }
-    }
-    mockOctokit.paginate.iterator.mockReturnValue(mockIterator)
-
-    const result = await getExistingLabels(mockOctokit as any, 'owner', 'repo')
-
-    expect(result).toEqual(['bug', 'S-5', 'enhancement'])
+    expect(result).toEqual(['javascript', 'ghas-secret-5', 'ghas-code-3'])
   })
 
   it('returns empty array on error', async () => {
     const mockOctokit = createMockOctokit()
-    const error = new Error('Not Found')
-    
-    const mockIterator = {
-      async *[Symbol.asyncIterator]() {
-        throw error
-      }
-    }
-    mockOctokit.paginate.iterator.mockReturnValue(mockIterator)
+    ;(mockOctokit.rest.repos.getAllTopics as any).mockRejectedValue(new Error('Not Found'))
 
-    const result = await getExistingLabels(mockOctokit as any, 'owner', 'repo')
+    const result = await getRepoTopics(mockOctokit as any, 'owner', 'repo')
 
     expect(result).toEqual([])
+  })
+})
+
+describe('replaceRepoTopics', () => {
+  it('calls replaceAllTopics with the provided names', async () => {
+    const mockOctokit = createMockOctokit()
+    ;(mockOctokit.rest.repos.replaceAllTopics as any).mockResolvedValue({ data: {} })
+
+    await replaceRepoTopics(mockOctokit as any, 'owner', 'repo', ['javascript', 'ghas-secret-5'])
+
+    expect(mockOctokit.rest.repos.replaceAllTopics).toHaveBeenCalledWith({
+      owner: 'owner',
+      repo: 'repo',
+      names: ['javascript', 'ghas-secret-5']
+    })
   })
 })

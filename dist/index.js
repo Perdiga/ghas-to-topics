@@ -35239,8 +35239,8 @@ exports.getEnterpriseRepos = getEnterpriseRepos;
 exports.getSecurityAlertCount = getSecurityAlertCount;
 exports.getCodeScanningAlertCount = getCodeScanningAlertCount;
 exports.getDependabotAlertCount = getDependabotAlertCount;
-exports.getExistingLabels = getExistingLabels;
-exports.upsertLabel = upsertLabel;
+exports.getRepoTopics = getRepoTopics;
+exports.replaceRepoTopics = replaceRepoTopics;
 const core = __importStar(__nccwpck_require__(7484));
 async function getOrgRepos(octokit, org) {
     core.info(`Fetching repositories for organization: ${org}`);
@@ -35383,60 +35383,18 @@ async function getDependabotAlertCount(octokit, owner, repo) {
         throw error;
     }
 }
-async function getExistingLabels(octokit, owner, repo) {
+async function getRepoTopics(octokit, owner, repo) {
     try {
-        const labels = [];
-        const iterator = octokit.paginate.iterator(octokit.rest.issues.listLabelsForRepo, {
-            owner,
-            repo,
-            per_page: 100
-        });
-        for await (const response of iterator) {
-            for (const label of response.data) {
-                labels.push(label.name);
-            }
-        }
-        return labels;
+        const response = await octokit.rest.repos.getAllTopics({ owner, repo });
+        return response.data.names;
     }
     catch (error) {
-        core.warning(`Failed to get labels for ${owner}/${repo}: ${error.message}`);
+        core.warning(`Failed to get topics for ${owner}/${repo}: ${error.message}`);
         return [];
     }
 }
-async function upsertLabel(octokit, owner, repo, name, color, description) {
-    try {
-        // Try to get the label first
-        await octokit.rest.issues.getLabel({
-            owner,
-            repo,
-            name
-        });
-        // Label exists, update it
-        await octokit.rest.issues.updateLabel({
-            owner,
-            repo,
-            name,
-            color,
-            description
-        });
-        core.debug(`Updated label ${name} on ${owner}/${repo}`);
-    }
-    catch (error) {
-        if (error.status === 404) {
-            // Label doesn't exist, create it
-            await octokit.rest.issues.createLabel({
-                owner,
-                repo,
-                name,
-                color,
-                description
-            });
-            core.debug(`Created label ${name} on ${owner}/${repo}`);
-        }
-        else {
-            throw error;
-        }
-    }
+async function replaceRepoTopics(octokit, owner, repo, names) {
+    await octokit.rest.repos.replaceAllTopics({ owner, repo, names });
 }
 
 
@@ -35484,16 +35442,12 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(7484));
 const rest_1 = __nccwpck_require__(5772);
 const github_1 = __nccwpck_require__(9248);
-const labels_1 = __nccwpck_require__(4584);
+const topics_1 = __nccwpck_require__(987);
 async function parseInputs() {
     const token = core.getInput('token', { required: true });
     const organization = core.getInput('organization');
     const enterprise = core.getInput('enterprise');
-    const dryRunInput = core.getInput('dry-run');
-    const dryRun = dryRunInput === 'true';
-    const labelColorSecurity = core.getInput('label-color-security') || 'd73a4a';
-    const labelColorCode = core.getInput('label-color-code') || 'e4e669';
-    const labelColorDependabot = core.getInput('label-color-dependabot') || '0075ca';
+    const dryRun = core.getInput('dry-run') === 'true';
     if (!organization && !enterprise) {
         throw new Error('Must provide either organization or enterprise input');
     }
@@ -35504,13 +35458,10 @@ async function parseInputs() {
         token,
         organization: organization || undefined,
         enterprise: enterprise || undefined,
-        dryRun,
-        labelColorSecurity,
-        labelColorCode,
-        labelColorDependabot
+        dryRun
     };
 }
-async function processRepository(octokit, repo, labelConfigs, dryRun) {
+async function processRepository(octokit, repo, dryRun) {
     core.info(`Processing ${repo.full_name}...`);
     const [security, codeScanning, dependabot] = await Promise.all([
         (0, github_1.getSecurityAlertCount)(octokit, repo.owner, repo.name),
@@ -35518,16 +35469,12 @@ async function processRepository(octokit, repo, labelConfigs, dryRun) {
         (0, github_1.getDependabotAlertCount)(octokit, repo.owner, repo.name)
     ]);
     core.info(`  Secret scanning: ${security}, Code scanning: ${codeScanning}, Dependabot: ${dependabot}`);
-    const labelsApplied = await (0, labels_1.processRepoLabels)(octokit, repo, { security, codeScanning, dependabot }, labelConfigs, dryRun);
-    return labelsApplied;
+    return (0, topics_1.processRepoTopics)(octokit, repo, { security, codeScanning, dependabot }, dryRun);
 }
 async function run() {
     try {
         const inputs = await parseInputs();
-        const octokit = new rest_1.Octokit({
-            auth: inputs.token
-        });
-        // Get repositories
+        const octokit = new rest_1.Octokit({ auth: inputs.token });
         let repos;
         if (inputs.organization) {
             repos = await (0, github_1.getOrgRepos)(octokit, inputs.organization);
@@ -35538,37 +35485,17 @@ async function run() {
         else {
             throw new Error('No organization or enterprise specified');
         }
-        // Filter out archived repos
         const activeRepos = repos.filter(repo => !repo.archived);
         core.info(`Processing ${activeRepos.length} active repositories (${repos.length - activeRepos.length} archived repos skipped)`);
-        // Configure labels
-        const labelConfigs = [
-            {
-                prefix: 'S',
-                color: inputs.labelColorSecurity,
-                description: 'Secret scanning alert count'
-            },
-            {
-                prefix: 'C',
-                color: inputs.labelColorCode,
-                description: 'Code scanning alert count'
-            },
-            {
-                prefix: 'D',
-                color: inputs.labelColorDependabot,
-                description: 'Dependabot alert count'
-            }
-        ];
-        // Process repos with concurrency limit
         const concurrencyLimit = 10;
-        let totalLabelsApplied = 0;
+        let totalTopicsApplied = 0;
         let processedCount = 0;
         for (let i = 0; i < activeRepos.length; i += concurrencyLimit) {
             const batch = activeRepos.slice(i, i + concurrencyLimit);
-            const results = await Promise.allSettled(batch.map(repo => processRepository(octokit, repo, labelConfigs, inputs.dryRun)));
+            const results = await Promise.allSettled(batch.map(repo => processRepository(octokit, repo, inputs.dryRun)));
             for (const result of results) {
                 if (result.status === 'fulfilled') {
-                    totalLabelsApplied += result.value;
+                    totalTopicsApplied += result.value;
                     processedCount++;
                 }
                 else {
@@ -35576,15 +35503,13 @@ async function run() {
                 }
             }
         }
-        // Set outputs
         core.setOutput('repositories-processed', processedCount.toString());
-        core.setOutput('labels-applied', totalLabelsApplied.toString());
-        // Summary
+        core.setOutput('topics-applied', totalTopicsApplied.toString());
         core.info('');
         core.info('='.repeat(50));
-        core.info(`Summary:`);
+        core.info('Summary:');
         core.info(`  Repositories processed: ${processedCount}`);
-        core.info(`  Labels applied/updated: ${totalLabelsApplied}`);
+        core.info(`  Repositories with topic updates: ${totalTopicsApplied}`);
         if (inputs.dryRun) {
             core.info('  (DRY RUN - no changes were made)');
         }
@@ -35599,7 +35524,7 @@ run();
 
 /***/ }),
 
-/***/ 4584:
+/***/ 987:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -35638,94 +35563,57 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.labelName = labelName;
-exports.findExistingLabelByPrefix = findExistingLabelByPrefix;
-exports.processRepoLabels = processRepoLabels;
+exports.topicName = topicName;
+exports.findExistingTopicByPrefix = findExistingTopicByPrefix;
+exports.processRepoTopics = processRepoTopics;
 const core = __importStar(__nccwpck_require__(7484));
 const github_1 = __nccwpck_require__(9248);
-function labelName(prefix, count) {
+const TOPIC_PREFIXES = {
+    security: 'ghas-secret',
+    codeScanning: 'ghas-code',
+    dependabot: 'ghas-dependabot'
+};
+function topicName(prefix, count) {
     return `${prefix}-${count}`;
 }
-function findExistingLabelByPrefix(labels, prefix) {
+function findExistingTopicByPrefix(topics, prefix) {
     const pattern = new RegExp(`^${prefix}-\\d+$`);
-    return labels.find(label => pattern.test(label));
+    return topics.find(topic => pattern.test(topic));
 }
-async function processRepoLabels(octokit, repo, counts, configs, dryRun) {
-    let labelsApplied = 0;
-    const existingLabels = await (0, github_1.getExistingLabels)(octokit, repo.owner, repo.name);
-    const labelMap = {
-        'S': { count: counts.security, config: configs[0] },
-        'C': { count: counts.codeScanning, config: configs[1] },
-        'D': { count: counts.dependabot, config: configs[2] }
-    };
-    for (const [prefix, { count, config }] of Object.entries(labelMap)) {
-        const existingLabel = findExistingLabelByPrefix(existingLabels, prefix);
-        if (count === 0) {
-            // No alerts — remove any existing label for this prefix
-            if (existingLabel) {
-                if (dryRun) {
-                    core.info(`[DRY RUN] Would delete label ${existingLabel} from ${repo.full_name} (0 alerts)`);
-                }
-                else {
-                    try {
-                        await octokit.rest.issues.deleteLabel({
-                            owner: repo.owner,
-                            repo: repo.name,
-                            name: existingLabel
-                        });
-                        core.info(`Removed label ${existingLabel} from ${repo.full_name} (0 alerts)`);
-                    }
-                    catch (error) {
-                        core.warning(`Failed to delete label ${existingLabel} from ${repo.full_name}: ${error.message}`);
-                    }
-                }
-                labelsApplied++;
-            }
-            continue;
-        }
-        // count > 0 — create or update label
-        const newLabelName = labelName(prefix, count);
-        if (existingLabel && existingLabel !== newLabelName) {
-            // Count changed — delete old label and create updated one
-            if (dryRun) {
-                core.info(`[DRY RUN] Would update label ${existingLabel} → ${newLabelName} on ${repo.full_name}`);
-            }
-            else {
-                try {
-                    await octokit.rest.issues.deleteLabel({
-                        owner: repo.owner,
-                        repo: repo.name,
-                        name: existingLabel
-                    });
-                }
-                catch (error) {
-                    core.warning(`Failed to delete label ${existingLabel} from ${repo.full_name}: ${error.message}`);
-                }
-                await (0, github_1.upsertLabel)(octokit, repo.owner, repo.name, newLabelName, config.color, config.description);
-                core.info(`Updated label ${existingLabel} → ${newLabelName} on ${repo.full_name}`);
-            }
-            labelsApplied++;
-        }
-        else if (!existingLabel) {
-            // No existing label — create it
-            if (dryRun) {
-                core.info(`[DRY RUN] Would create label ${newLabelName} on ${repo.full_name}`);
-            }
-            else {
-                await (0, github_1.upsertLabel)(octokit, repo.owner, repo.name, newLabelName, config.color, config.description);
-                core.info(`Applied label ${newLabelName} to ${repo.full_name}`);
-            }
-            labelsApplied++;
-        }
-        else {
-            // existingLabel === newLabelName — already correct, sync color/description
-            if (!dryRun) {
-                await (0, github_1.upsertLabel)(octokit, repo.owner, repo.name, newLabelName, config.color, config.description);
-                core.debug(`Verified label ${newLabelName} on ${repo.full_name}`);
-            }
+async function processRepoTopics(octokit, repo, counts, dryRun) {
+    let topicsChanged = 0;
+    const existingTopics = await (0, github_1.getRepoTopics)(octokit, repo.owner, repo.name);
+    // Strip all existing GHAS topics
+    const nonGhasTopics = existingTopics.filter(t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}-\\d+$`).test(t)));
+    // Build new GHAS topics (only add when count > 0)
+    const newGhasTopics = [];
+    const alertMap = [
+        { prefix: TOPIC_PREFIXES.security, count: counts.security },
+        { prefix: TOPIC_PREFIXES.codeScanning, count: counts.codeScanning },
+        { prefix: TOPIC_PREFIXES.dependabot, count: counts.dependabot }
+    ];
+    for (const { prefix, count } of alertMap) {
+        if (count > 0) {
+            newGhasTopics.push(topicName(prefix, count));
         }
     }
-    return labelsApplied;
+    const updatedTopics = [...nonGhasTopics, ...newGhasTopics];
+    // Detect if anything actually changed
+    const oldGhasTopics = existingTopics.filter(t => !nonGhasTopics.includes(t)).sort();
+    const changed = JSON.stringify(oldGhasTopics) !== JSON.stringify([...newGhasTopics].sort());
+    if (!changed) {
+        core.debug(`Topics already up-to-date for ${repo.full_name}`);
+        return 0;
+    }
+    if (dryRun) {
+        core.info(`[DRY RUN] Would set topics on ${repo.full_name}: ${newGhasTopics.join(', ') || '(none)'}`);
+    }
+    else {
+        await (0, github_1.replaceRepoTopics)(octokit, repo.owner, repo.name, updatedTopics);
+        core.info(`Updated topics on ${repo.full_name}: ${newGhasTopics.join(', ') || '(removed all GHAS topics)'}`);
+    }
+    topicsChanged++;
+    return topicsChanged;
 }
 
 

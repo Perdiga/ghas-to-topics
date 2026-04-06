@@ -163,68 +163,21 @@ export async function getDependabotAlertCount(octokit: Octokit, owner: string, r
   }
 }
 
-export async function getExistingLabels(octokit: Octokit, owner: string, repo: string): Promise<string[]> {
+export async function getRepoTopics(octokit: Octokit, owner: string, repo: string): Promise<string[]> {
   try {
-    const labels: string[] = [];
-    const iterator = octokit.paginate.iterator(octokit.rest.issues.listLabelsForRepo, {
-      owner,
-      repo,
-      per_page: 100
-    });
-
-    for await (const response of iterator) {
-      for (const label of response.data) {
-        labels.push(label.name);
-      }
-    }
-
-    return labels;
+    const response = await octokit.rest.repos.getAllTopics({ owner, repo });
+    return response.data.names;
   } catch (error: any) {
-    core.warning(`Failed to get labels for ${owner}/${repo}: ${error.message}`);
+    core.warning(`Failed to get topics for ${owner}/${repo}: ${error.message}`);
     return [];
   }
 }
 
-export async function upsertLabel(
+export async function replaceRepoTopics(
   octokit: Octokit,
   owner: string,
   repo: string,
-  name: string,
-  color: string,
-  description: string
+  names: string[]
 ): Promise<void> {
-  try {
-    // Try to get the label first
-    await octokit.rest.issues.getLabel({
-      owner,
-      repo,
-      name
-    });
-
-    // Label exists, update it
-    await octokit.rest.issues.updateLabel({
-      owner,
-      repo,
-      name,
-      color,
-      description
-    });
-
-    core.debug(`Updated label ${name} on ${owner}/${repo}`);
-  } catch (error: any) {
-    if (error.status === 404) {
-      // Label doesn't exist, create it
-      await octokit.rest.issues.createLabel({
-        owner,
-        repo,
-        name,
-        color,
-        description
-      });
-
-      core.debug(`Created label ${name} on ${owner}/${repo}`);
-    } else {
-      throw error;
-    }
-  }
+  await octokit.rest.repos.replaceAllTopics({ owner, repo, names });
 }

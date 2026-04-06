@@ -1,16 +1,16 @@
-# GHAS Alert Labels
+# GHAS Alert Topics
 
-A GitHub Action that automatically labels repositories with their GitHub Advanced Security (GHAS) alert counts.
+A GitHub Action that automatically applies repository topics with GitHub Advanced Security (GHAS) alert counts.
 
 ## What it does
 
-This action scans all repositories in a GitHub organization or enterprise and applies labels indicating the count of open security alerts:
+This action scans all repositories in a GitHub organization or enterprise and sets topics indicating the count of open security alerts:
 
-- `S-<n>` — Secret scanning alerts
-- `C-<n>` — Code scanning alerts  
-- `D-<n>` — Dependabot alerts
+- `ghas-secret-<n>` — Secret scanning alerts
+- `ghas-code-<n>` — Code scanning alerts
+- `ghas-dependabot-<n>` — Dependabot alerts
 
-Labels are updated automatically, so if alert counts change, the labels will reflect the new counts on the next run.
+Topics are updated automatically on each run. Non-GHAS topics on a repository are preserved untouched.
 
 ## Required Token Scopes
 
@@ -18,7 +18,7 @@ Labels are updated automatically, so if alert counts change, the labels will ref
 
 - `security_events` — to read GHAS alert counts
 - `read:org` — to list organization repositories
-- `repo` (private repos) or `public_repo` (public repos only) — to create/update labels on repositories
+- `public_repo` — to update topics on repositories (use `repo` for private repos)
 
 For enterprise usage, the token must also have enterprise-level permissions.
 
@@ -32,10 +32,9 @@ Fine-grained tokens are scoped to specific organizations or repositories. Config
 | `Code scanning alerts` | Read | Read code scanning alert counts |
 | `Secret scanning alerts` | Read | Read secret scanning alert counts |
 | `Dependabot alerts` | Read | Read Dependabot alert counts |
-| `Issues` | Read and write | Create and update labels on repositories |
-| `Metadata` | Read (mandatory) | Required by GitHub for all fine-grained tokens |
+| `Metadata` | Read and write | Read and update repository topics |
 
-> **Note 1:** When creating the token, set the resource owner to your organization and grant access to **All repositories** (or the specific repos you want to label).
+> **Note 1:** When creating the token, set the resource owner to your organization and grant access to **All repositories** (or the specific repos you want to update).
 >
 > **Note 2:** Fine-grained tokens do not support enterprise-level scopes. For enterprise usage, a classic token is required.
 
@@ -46,43 +45,35 @@ Fine-grained tokens are scoped to specific organizations or repositories. Config
 | `token` | Yes | — | GitHub token with appropriate scopes |
 | `organization` | No | — | GitHub organization name (mutually exclusive with `enterprise`) |
 | `enterprise` | No | — | GitHub Enterprise slug (mutually exclusive with `organization`) |
-| `dry-run` | No | `false` | If `true`, logs what would happen without applying labels |
-| `label-color-security` | No | `d73a4a` | Hex color for secret scanning labels (S-*) |
-| `label-color-code` | No | `e4e669` | Hex color for code scanning labels (C-*) |
-| `label-color-dependabot` | No | `0075ca` | Hex color for Dependabot labels (D-*) |
+| `dry-run` | No | `false` | If `true`, logs what would happen without applying topics |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
 | `repositories-processed` | Number of repositories processed |
-| `labels-applied` | Number of labels applied or updated |
+| `topics-applied` | Number of repositories whose topics were updated |
 
 ## Usage
 
 ### For an organization
 
 ```yaml
-name: GHAS Alert Labels
+name: GHAS Alert Topics
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * *'  # Daily at 6am UTC
 
 jobs:
-  label:
+  topics:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: read
-      issues: write
-    
     steps:
       - uses: actions/checkout@v4
       
       - uses: your-org/ghas-to-labels@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GHAS_TOKEN }}
           organization: your-org-name
 ```
 
@@ -100,26 +91,27 @@ jobs:
 ```yaml
 - uses: your-org/ghas-to-labels@v1
   with:
-    token: ${{ secrets.GITHUB_TOKEN }}
+    token: ${{ secrets.GHAS_TOKEN }}
     organization: your-org-name
     dry-run: 'true'
 ```
 
-## Label Format
+## Topic Format
 
-Labels follow the pattern `{PREFIX}-{COUNT}`:
+Topics follow the pattern `ghas-{type}-{count}`:
 
-- `S-5` — 5 open secret scanning alerts
-- `C-12` — 12 open code scanning alerts
-- `D-3` — 3 open Dependabot alerts
+- `ghas-secret-5` — 5 open secret scanning alerts
+- `ghas-code-12` — 12 open code scanning alerts
+- `ghas-dependabot-3` — 3 open Dependabot alerts
 
-If a repository has 0 alerts for a given type, no label is applied. If the count decreases to 0, the existing label is removed.
+If a repository has 0 alerts for a given type, no topic is applied. If the count drops to 0, the existing topic is removed.
 
 ## Behavior
 
-- **Archived repositories are skipped** — they will not be labeled
-- **Labels are idempotent** — running multiple times with the same counts won't create duplicates
-- **Old labels are replaced** — if a repo had `S-5` and now has 3 alerts, `S-5` is deleted and `S-3` is created
+- **Archived repositories are skipped**
+- **Non-GHAS topics are preserved** — only `ghas-*` topics are managed; existing topics like `javascript` or `api` are left alone
+- **Idempotent** — running multiple times with the same counts won't update topics unnecessarily
+- **Counts change automatically** — if a repo had `ghas-secret-5` and now has 3 alerts, `ghas-secret-3` replaces it
 - **Processes repos in batches** — concurrency limit of 10 to respect API rate limits
 - **Handles missing permissions gracefully** — if GHAS is not enabled on a repo, it's counted as 0 alerts
 
