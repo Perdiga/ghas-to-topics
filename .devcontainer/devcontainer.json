@@ -2,7 +2,8 @@
   "name": "ghas-to-labels",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
   "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/copilot-cli:1": {}
   },
   "postCreateCommand": "npm install",
   "customizations": {
