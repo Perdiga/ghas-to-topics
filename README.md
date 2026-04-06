@@ -14,12 +14,30 @@ Labels are updated automatically, so if alert counts change, the labels will ref
 
 ## Required Token Scopes
 
-The GitHub token must have:
-- `security_events:read` — to read GHAS alert counts
+### Classic token (`ghp_*`)
+
+- `security_events` — to read GHAS alert counts
 - `read:org` — to list organization repositories
-- `repo` or `public_repo` — to create/update labels on repositories
+- `repo` (private repos) or `public_repo` (public repos only) — to create/update labels on repositories
 
 For enterprise usage, the token must also have enterprise-level permissions.
+
+### Fine-grained personal access token (`github_pat_*`)
+
+Fine-grained tokens are scoped to specific organizations or repositories. Configure these permissions:
+
+| Permission | Access | Why |
+|------------|--------|-----|
+| **Repository permissions** | | |
+| `Code scanning alerts` | Read | Read code scanning alert counts |
+| `Secret scanning alerts` | Read | Read secret scanning alert counts |
+| `Dependabot alerts` | Read | Read Dependabot alert counts |
+| `Issues` | Read and write | Create and update labels on repositories |
+| `Metadata` | Read (mandatory) | Required by GitHub for all fine-grained tokens |
+
+> **Note 1:** When creating the token, set the resource owner to your organization and grant access to **All repositories** (or the specific repos you want to label).
+>
+> **Note 2:** Fine-grained tokens do not support enterprise-level scopes. For enterprise usage, a classic token is required.
 
 ## Inputs
 
