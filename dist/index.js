@@ -35448,6 +35448,7 @@ async function parseInputs() {
     const organization = core.getInput('organization');
     const enterprise = core.getInput('enterprise');
     const dryRun = core.getInput('dry-run') === 'true';
+    const hideCount = core.getInput('hide-count') === 'true';
     if (!organization && !enterprise) {
         throw new Error('Must provide either organization or enterprise input');
     }
@@ -35458,10 +35459,11 @@ async function parseInputs() {
         token,
         organization: organization || undefined,
         enterprise: enterprise || undefined,
-        dryRun
+        dryRun,
+        hideCount
     };
 }
-async function processRepository(octokit, repo, dryRun) {
+async function processRepository(octokit, repo, dryRun, hideCount) {
     core.info(`Processing ${repo.full_name}...`);
     const [security, codeScanning, dependabot] = await Promise.all([
         (0, github_1.getSecurityAlertCount)(octokit, repo.owner, repo.name),
@@ -35469,7 +35471,7 @@ async function processRepository(octokit, repo, dryRun) {
         (0, github_1.getDependabotAlertCount)(octokit, repo.owner, repo.name)
     ]);
     core.info(`  Secret scanning: ${security}, Code scanning: ${codeScanning}, Dependabot: ${dependabot}`);
-    return (0, topics_1.processRepoTopics)(octokit, repo, { security, codeScanning, dependabot }, dryRun);
+    return (0, topics_1.processRepoTopics)(octokit, repo, { security, codeScanning, dependabot }, dryRun, hideCount);
 }
 async function run() {
     try {
@@ -35492,7 +35494,7 @@ async function run() {
         let processedCount = 0;
         for (let i = 0; i < activeRepos.length; i += concurrencyLimit) {
             const batch = activeRepos.slice(i, i + concurrencyLimit);
-            const results = await Promise.allSettled(batch.map(repo => processRepository(octokit, repo, inputs.dryRun)));
+            const results = await Promise.allSettled(batch.map(repo => processRepository(octokit, repo, inputs.dryRun, inputs.hideCount)));
             for (const result of results) {
                 if (result.status === 'fulfilled') {
                     totalTopicsApplied += result.value;
@@ -35573,18 +35575,18 @@ const TOPIC_PREFIXES = {
     codeScanning: 'ghas-code',
     dependabot: 'ghas-dependabot'
 };
-function topicName(prefix, count) {
-    return `${prefix}-${count}`;
+function topicName(prefix, count, hideCount = false) {
+    return hideCount ? prefix : `${prefix}-${count}`;
 }
 function findExistingTopicByPrefix(topics, prefix) {
-    const pattern = new RegExp(`^${prefix}-\\d+$`);
+    const pattern = new RegExp(`^${prefix}(-\\d+)?$`);
     return topics.find(topic => pattern.test(topic));
 }
-async function processRepoTopics(octokit, repo, counts, dryRun) {
+async function processRepoTopics(octokit, repo, counts, dryRun, hideCount = false) {
     let topicsChanged = 0;
     const existingTopics = await (0, github_1.getRepoTopics)(octokit, repo.owner, repo.name);
-    // Strip all existing GHAS topics
-    const nonGhasTopics = existingTopics.filter(t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}-\\d+$`).test(t)));
+    // Strip all existing GHAS topics (both with and without count suffix to handle mode switches)
+    const nonGhasTopics = existingTopics.filter(t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}(-\\d+)?$`).test(t)));
     // Build new GHAS topics (only add when count > 0)
     const newGhasTopics = [];
     const alertMap = [
@@ -35594,7 +35596,7 @@ async function processRepoTopics(octokit, repo, counts, dryRun) {
     ];
     for (const { prefix, count } of alertMap) {
         if (count > 0) {
-            newGhasTopics.push(topicName(prefix, count));
+            newGhasTopics.push(topicName(prefix, count, hideCount));
         }
     }
     const updatedTopics = [...nonGhasTopics, ...newGhasTopics];

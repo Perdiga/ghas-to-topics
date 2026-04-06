@@ -9,12 +9,12 @@ const TOPIC_PREFIXES = {
   dependabot: 'ghas-dependabot'
 } as const;
 
-export function topicName(prefix: string, count: number): string {
-  return `${prefix}-${count}`;
+export function topicName(prefix: string, count: number, hideCount = false): string {
+  return hideCount ? prefix : `${prefix}-${count}`;
 }
 
 export function findExistingTopicByPrefix(topics: string[], prefix: string): string | undefined {
-  const pattern = new RegExp(`^${prefix}-\\d+$`);
+  const pattern = new RegExp(`^${prefix}(-\\d+)?$`);
   return topics.find(topic => pattern.test(topic));
 }
 
@@ -22,15 +22,16 @@ export async function processRepoTopics(
   octokit: Octokit,
   repo: Repository,
   counts: AlertCounts,
-  dryRun: boolean
+  dryRun: boolean,
+  hideCount = false
 ): Promise<number> {
   let topicsChanged = 0;
 
   const existingTopics = await getRepoTopics(octokit, repo.owner, repo.name);
 
-  // Strip all existing GHAS topics
+  // Strip all existing GHAS topics (both with and without count suffix to handle mode switches)
   const nonGhasTopics = existingTopics.filter(
-    t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}-\\d+$`).test(t))
+    t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}(-\\d+)?$`).test(t))
   );
 
   // Build new GHAS topics (only add when count > 0)
@@ -43,7 +44,7 @@ export async function processRepoTopics(
 
   for (const { prefix, count } of alertMap) {
     if (count > 0) {
-      newGhasTopics.push(topicName(prefix, count));
+      newGhasTopics.push(topicName(prefix, count, hideCount));
     }
   }
 

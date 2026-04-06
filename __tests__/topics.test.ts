@@ -20,12 +20,33 @@ describe('topicName', () => {
   it('handles large counts', () => {
     expect(topicName('ghas-secret', 9999)).toBe('ghas-secret-9999')
   })
+
+  describe('hideCount = true', () => {
+    it('returns bare prefix without count', () => {
+      expect(topicName('ghas-secret', 5, true)).toBe('ghas-secret')
+    })
+
+    it('returns bare prefix for all alert types', () => {
+      expect(topicName('ghas-code', 3, true)).toBe('ghas-code')
+      expect(topicName('ghas-dependabot', 10, true)).toBe('ghas-dependabot')
+    })
+
+    it('ignores the count value entirely', () => {
+      expect(topicName('ghas-secret', 0, true)).toBe('ghas-secret')
+      expect(topicName('ghas-secret', 9999, true)).toBe('ghas-secret')
+    })
+  })
 })
 
 describe('findExistingTopicByPrefix', () => {
-  it('finds existing topic with matching prefix', () => {
+  it('finds existing topic with count suffix', () => {
     const topics = ['javascript', 'ghas-secret-5', 'security']
     expect(findExistingTopicByPrefix(topics, 'ghas-secret')).toBe('ghas-secret-5')
+  })
+
+  it('finds existing bare prefix topic (hideCount mode)', () => {
+    const topics = ['javascript', 'ghas-secret', 'security']
+    expect(findExistingTopicByPrefix(topics, 'ghas-secret')).toBe('ghas-secret')
   })
 
   it('returns undefined when no match', () => {

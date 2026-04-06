@@ -43,18 +43,18 @@ const TOPIC_PREFIXES = {
     codeScanning: 'ghas-code',
     dependabot: 'ghas-dependabot'
 };
-function topicName(prefix, count) {
-    return `${prefix}-${count}`;
+function topicName(prefix, count, hideCount = false) {
+    return hideCount ? prefix : `${prefix}-${count}`;
 }
 function findExistingTopicByPrefix(topics, prefix) {
-    const pattern = new RegExp(`^${prefix}-\\d+$`);
+    const pattern = new RegExp(`^${prefix}(-\\d+)?$`);
     return topics.find(topic => pattern.test(topic));
 }
-async function processRepoTopics(octokit, repo, counts, dryRun) {
+async function processRepoTopics(octokit, repo, counts, dryRun, hideCount = false) {
     let topicsChanged = 0;
     const existingTopics = await (0, github_1.getRepoTopics)(octokit, repo.owner, repo.name);
-    // Strip all existing GHAS topics
-    const nonGhasTopics = existingTopics.filter(t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}-\\d+$`).test(t)));
+    // Strip all existing GHAS topics (both with and without count suffix to handle mode switches)
+    const nonGhasTopics = existingTopics.filter(t => !Object.values(TOPIC_PREFIXES).some(prefix => new RegExp(`^${prefix}(-\\d+)?$`).test(t)));
     // Build new GHAS topics (only add when count > 0)
     const newGhasTopics = [];
     const alertMap = [
@@ -64,7 +64,7 @@ async function processRepoTopics(octokit, repo, counts, dryRun) {
     ];
     for (const { prefix, count } of alertMap) {
         if (count > 0) {
-            newGhasTopics.push(topicName(prefix, count));
+            newGhasTopics.push(topicName(prefix, count, hideCount));
         }
     }
     const updatedTopics = [...nonGhasTopics, ...newGhasTopics];

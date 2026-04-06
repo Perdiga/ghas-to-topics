@@ -41,6 +41,64 @@ describe('Integration Tests - End-to-End Flow', () => {
     })
   })
 
+  describe('Scenario 1b: hide-count mode - topics without count suffix', () => {
+    it('sets bare prefix topics when hideCount is true', async () => {
+      const mockOctokit = createMockOctokit()
+      const repo: Repository = {
+        name: 'test-repo',
+        owner: 'test-org',
+        full_name: 'test-org/test-repo',
+        id: 1,
+        archived: false,
+        visibility: 'public'
+      }
+      const counts: AlertCounts = { security: 5, codeScanning: 2, dependabot: 10 }
+
+      ;(mockOctokit.rest.repos.getAllTopics as any).mockResolvedValue({ data: { names: [] } })
+      ;(mockOctokit.rest.repos.replaceAllTopics as any).mockResolvedValue({ data: {} })
+
+      const topicsChanged = await processRepoTopics(mockOctokit as any, repo, counts, false, true)
+
+      expect(topicsChanged).toBe(1)
+      expect(mockOctokit.rest.repos.replaceAllTopics).toHaveBeenCalledWith(
+        expect.objectContaining({
+          names: expect.arrayContaining(['ghas-secret', 'ghas-code', 'ghas-dependabot'])
+        })
+      )
+      const call = (mockOctokit.rest.repos.replaceAllTopics as any).mock.calls[0][0]
+      expect(call.names).not.toContain('ghas-secret-5')
+      expect(call.names).not.toContain('ghas-code-2')
+    })
+
+    it('removes old numbered topics when switching to hideCount mode', async () => {
+      const mockOctokit = createMockOctokit()
+      const repo: Repository = {
+        name: 'test-repo',
+        owner: 'test-org',
+        full_name: 'test-org/test-repo',
+        id: 1,
+        archived: false,
+        visibility: 'public'
+      }
+      const counts: AlertCounts = { security: 5, codeScanning: 0, dependabot: 3 }
+
+      ;(mockOctokit.rest.repos.getAllTopics as any).mockResolvedValue({
+        data: { names: ['ghas-secret-5', 'ghas-dependabot-3', 'javascript'] }
+      })
+      ;(mockOctokit.rest.repos.replaceAllTopics as any).mockResolvedValue({ data: {} })
+
+      const topicsChanged = await processRepoTopics(mockOctokit as any, repo, counts, false, true)
+
+      expect(topicsChanged).toBe(1)
+      const call = (mockOctokit.rest.repos.replaceAllTopics as any).mock.calls[0][0]
+      expect(call.names).toContain('ghas-secret')
+      expect(call.names).toContain('ghas-dependabot')
+      expect(call.names).not.toContain('ghas-secret-5')
+      expect(call.names).not.toContain('ghas-dependabot-3')
+      expect(call.names).toContain('javascript')
+    })
+  })
+
   describe('Scenario 2: Idempotency - re-running with same counts', () => {
     it('does not call replaceAllTopics when topics already match', async () => {
       const mockOctokit = createMockOctokit()

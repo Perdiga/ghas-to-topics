@@ -3,6 +3,7 @@ export interface ActionInputs {
   organization?: string;
   enterprise?: string;
   dryRun: boolean;
+  hideCount: boolean;
 }
 
 export interface Repository {

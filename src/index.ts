@@ -15,6 +15,7 @@ async function parseInputs(): Promise<ActionInputs> {
   const organization = core.getInput('organization');
   const enterprise = core.getInput('enterprise');
   const dryRun = core.getInput('dry-run') === 'true';
+  const hideCount = core.getInput('hide-count') === 'true';
 
   if (!organization && !enterprise) {
     throw new Error('Must provide either organization or enterprise input');
@@ -28,14 +29,16 @@ async function parseInputs(): Promise<ActionInputs> {
     token,
     organization: organization || undefined,
     enterprise: enterprise || undefined,
-    dryRun
+    dryRun,
+    hideCount
   };
 }
 
 async function processRepository(
   octokit: Octokit,
   repo: Repository,
-  dryRun: boolean
+  dryRun: boolean,
+  hideCount: boolean
 ): Promise<number> {
   core.info(`Processing ${repo.full_name}...`);
 
@@ -51,7 +54,8 @@ async function processRepository(
     octokit,
     repo,
     { security, codeScanning, dependabot },
-    dryRun
+    dryRun,
+    hideCount
   );
 }
 
@@ -81,7 +85,7 @@ async function run(): Promise<void> {
       const batch = activeRepos.slice(i, i + concurrencyLimit);
 
       const results = await Promise.allSettled(
-        batch.map(repo => processRepository(octokit, repo, inputs.dryRun))
+        batch.map(repo => processRepository(octokit, repo, inputs.dryRun, inputs.hideCount))
       );
 
       for (const result of results) {

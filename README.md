@@ -53,6 +53,7 @@ Fine-grained tokens are scoped to specific organizations or repositories. Config
 | `organization` | No | — | GitHub organization name (mutually exclusive with `enterprise`) |
 | `enterprise` | No | — | GitHub Enterprise slug (mutually exclusive with `organization`) |
 | `dry-run` | No | `false` | If `true`, logs what would happen without applying topics |
+| `hide-count` | No | `false` | If `true`, applies only the alert type as a topic (e.g. `ghas-secret`) without the count suffix |
 
 ## Outputs
 
@@ -105,11 +106,19 @@ jobs:
 
 ## Topic Format
 
-Topics follow the pattern `ghas-{type}-{count}`:
+By default, topics follow the pattern `ghas-{type}-{count}`:
 
 - `ghas-secret-5` — 5 open secret scanning alerts
 - `ghas-code-12` — 12 open code scanning alerts
 - `ghas-dependabot-3` — 3 open Dependabot alerts
+
+When `hide-count: 'true'`, only the alert type is applied (without the number):
+
+- `ghas-secret` — has open secret scanning alerts
+- `ghas-code` — has open code scanning alerts
+- `ghas-dependabot` — has open Dependabot alerts
+
+Use `hide-count` when you want simple binary visibility (has alerts / no alerts) rather than showing exact counts.
 
 If a repository has 0 alerts for a given type, no topic is applied. If the count drops to 0, the existing topic is removed.
 

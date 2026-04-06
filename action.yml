@@ -16,6 +16,10 @@ inputs:
     description: 'Log what would happen without applying topics'
     required: false
     default: 'false'
+  hide-count:
+    description: 'If true, apply only the alert type as a topic (e.g. ghas-secret) without the count suffix'
+    required: false
+    default: 'false'
 
 outputs:
   repositories-processed:
