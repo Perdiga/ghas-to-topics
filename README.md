@@ -2,6 +2,12 @@
 
 A GitHub Action that automatically applies repository topics with GitHub Advanced Security (GHAS) alert counts.
 
+## Why
+
+GitHub doesn't provide a built-in way to filter or search repositories by security alert counts. When managing security across an organization or enterprise with dozens or hundreds of repositories, it's hard to quickly answer "which repos have open secret scanning alerts?" or "which repos have the most Dependabot vulnerabilities?"
+
+By tagging repositories with topics like `ghas-secret-5` or `ghas-dependabot-12`, you can use GitHub's native topic search and filtering to instantly find repositories with specific types of alerts — without building custom dashboards or running scripts.
+
 ## What it does
 
 This action scans all repositories in a GitHub organization or enterprise and sets topics indicating the count of open security alerts:
