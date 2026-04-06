@@ -1,0 +1,44 @@
+{
+  "agents": {
+    "martin": {
+      "persistent_name": "Martin",
+      "universe": "Sneakers",
+      "role": "Lead",
+      "created_at": "2026-04-06T14:22:27Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "whistler": {
+      "persistent_name": "Whistler",
+      "universe": "Sneakers",
+      "role": "Actions Dev",
+      "created_at": "2026-04-06T14:22:27Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "mother": {
+      "persistent_name": "Mother",
+      "universe": "Sneakers",
+      "role": "Tester",
+      "created_at": "2026-04-06T14:22:27Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "scribe": {
+      "persistent_name": "Scribe",
+      "universe": "exempt",
+      "role": "Scribe",
+      "created_at": "2026-04-06T14:22:27Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "ralph": {
+      "persistent_name": "Ralph",
+      "universe": "exempt",
+      "role": "Work Monitor",
+      "created_at": "2026-04-06T14:22:27Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}

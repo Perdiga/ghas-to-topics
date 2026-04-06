@@ -1,0 +1,23 @@
+{
+  "universe_usage_history": [
+    {
+      "universe": "Sneakers",
+      "assignment_id": "ghas-to-labels-001",
+      "assigned_at": "2026-04-06T14:22:27Z"
+    }
+  ],
+  "assignment_cast_snapshots": {
+    "ghas-to-labels-001": {
+      "universe": "Sneakers",
+      "project": "ghas-to-labels",
+      "cast": [
+        { "name": "Martin", "role": "Lead" },
+        { "name": "Whistler", "role": "Actions Dev" },
+        { "name": "Mother", "role": "Tester" },
+        { "name": "Scribe", "role": "Scribe" },
+        { "name": "Ralph", "role": "Work Monitor" }
+      ],
+      "created_at": "2026-04-06T14:22:27Z"
+    }
+  }
+}
