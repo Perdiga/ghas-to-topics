@@ -1,0 +1,44 @@
+name: 'GHAS Alert Labels'
+description: 'Label repositories with their GHAS alert counts (secret scanning, code scanning, Dependabot)'
+author: 'Whistler'
+
+inputs:
+  token:
+    description: 'GitHub token with security_events and read:org scopes'
+    required: true
+  organization:
+    description: 'GitHub organization name (mutually exclusive with enterprise)'
+    required: false
+  enterprise:
+    description: 'GitHub Enterprise slug (mutually exclusive with organization)'
+    required: false
+  dry-run:
+    description: 'Log what would happen without applying labels'
+    required: false
+    default: 'false'
+  label-color-security:
+    description: 'Color for secret scanning labels (S-*)'
+    required: false
+    default: 'd73a4a'
+  label-color-code:
+    description: 'Color for code scanning labels (C-*)'
+    required: false
+    default: 'e4e669'
+  label-color-dependabot:
+    description: 'Color for Dependabot labels (D-*)'
+    required: false
+    default: '0075ca'
+
+outputs:
+  repositories-processed:
+    description: 'Number of repositories processed'
+  labels-applied:
+    description: 'Number of labels applied or updated'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'tag'
+  color: 'orange'
